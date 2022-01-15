@@ -128,3 +128,108 @@ class LinearMomentumEMAHook(BaseEMAHook):
         super(LinearMomentumEMAHook, self).__init__(**kwargs)
         self.momentum_fun = lambda x: min(self.momentum**self.interval,
                                           (1 + x) / (warm_up + x))
+
+@HOOKS.register_module()
+class CycleEMAHook(BaseEMAHook):
+    
+    def __init__(self, warm_up=10, cycle_epoch=-1, **kwargs):
+
+        super(CycleEMAHook, self).__init__(**kwargs)
+        self.cycle_epoch = cycle_epoch
+        self.step = 0
+        self.epoch = 0
+        self.decay = 1 - self.momentum
+        self.warm_up = warm_up
+
+    def before_run(self, runner):
+        """To resume model with it's ema parameters more friendly.
+
+        Register ema parameter as ``named_buffer`` to model.
+        """
+        model = runner.model
+        if is_module_wrapper(model):
+            model = model.module
+        self.param_ema_buffer = {}
+        if self.skip_buffers:
+            self.model_parameters = dict(model.named_parameters())
+        else:
+            self.model_parameters = model.state_dict()
+        for name, value in self.model_parameters.items():
+            # "." is not allowed in module's buffer name
+            buffer_name = f"ema_{name.replace('.', '_')}"
+            self.param_ema_buffer[name] = buffer_name
+            model.register_buffer(buffer_name, value.data.new_zeros(value.data.shape).clone())
+        self.model_buffers = dict(model.named_buffers())
+        if self.checkpoint is not None:
+            runner.resume(self.checkpoint)
+
+    def reset(self):
+        print('[INFO] reset EMA model...')
+        for name, parameter in self.model_parameters.items():
+            # exclude num_tracking
+            if parameter.dtype.is_floating_point:
+                # data = parameter.data.clone()
+                data = parameter.data.new_zeros(parameter.data.shape)
+                buffer_name = self.param_ema_buffer[name]
+                ema_buffer = self.model_buffers[buffer_name]
+                ema_buffer.data.copy_(data)
+        self.step = 0
+        self.epoch = 0
+    
+    def get_momentum(self):
+        return min(self.decay, (1 + self.step) / (self.warm_up + self.step))
+
+    def _swap_ema_parameters_before_train(self):
+        """Swap the parameter of model with parameter in ema_buffer."""
+        for name, value in self.model_parameters.items():
+            temp = value.data.clone() * (1 - (self._decay) ** self.step)
+            ema_buffer = self.model_buffers[self.param_ema_buffer[name]]
+            value.data.copy_(ema_buffer.data)
+            ema_buffer.data.copy_(temp)
+
+    def _swap_ema_parameters_after_train(self):
+        """Swap the parameter of model with parameter in ema_buffer."""
+        for name, value in self.model_parameters.items():
+            temp = value.data.clone()
+            ema_buffer = self.model_buffers[self.param_ema_buffer[name]]
+            value.data.copy_(ema_buffer.data / (1 - (self._decay) ** self.step))
+            ema_buffer.data.copy_(temp)
+
+    def after_train_iter(self, runner):
+        """Update ema parameter every self.interval iterations."""
+        if (runner.iter + 1) % self.interval != 0:
+            return
+        self._decay = self.get_momentum()
+        for name, parameter in self.model_parameters.items():
+            # exclude num_tracking
+            if parameter.dtype.is_floating_point:
+                buffer_name = self.param_ema_buffer[name]
+                buffer_parameter = self.model_buffers[buffer_name]
+                buffer_parameter.mul_(self._decay).add_(
+                    parameter.data, alpha=1-self._decay)
+        self.step += 1
+
+    def after_train_epoch(self, runner):
+        """We load parameter values from ema backup to model before the
+        EvalHook."""
+        self._swap_ema_parameters_after_train()
+
+    def before_train_epoch(self, runner):
+        """We recover model's parameter from ema backup after last epoch's
+        EvalHook."""
+        if self.epoch > 0:
+            self._swap_ema_parameters_before_train()
+        self.epoch += 1
+        if self.cycle_epoch > 0 and self.epoch == self.cycle_epoch:
+            self.reset()
+
+
+
+
+
+
+
+
+
+
+

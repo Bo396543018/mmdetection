@@ -24,6 +24,7 @@ from .nasfcos_head import NASFCOSHead
 from .paa_head import PAAHead
 from .pisa_retinanet_head import PISARetinaHead
 from .pisa_ssd_head import PISASSDHead
+from .picodet_head import PicoDetHead
 from .reppoints_head import RepPointsHead
 from .retina_head import RetinaHead
 from .retina_sepbn_head import RetinaSepBNHead
@@ -49,5 +50,5 @@ __all__ = [
     'CascadeRPNHead', 'EmbeddingRPNHead', 'LDHead', 'CascadeRPNHead',
     'AutoAssignHead', 'DETRHead', 'YOLOFHead', 'DeformableDETRHead',
     'SOLOHead', 'DecoupledSOLOHead', 'CenterNetHead', 'YOLOXHead',
-    'DecoupledSOLOLightHead', 'LADHead', 'TOODHead'
+    'DecoupledSOLOLightHead', 'LADHead', 'TOODHead', 'PicoDetHead'
 ]

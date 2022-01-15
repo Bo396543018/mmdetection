@@ -16,6 +16,8 @@ class DarknetBottleneck(BaseModule):
     Args:
         in_channels (int): The input channels of this Module.
         out_channels (int): The output channels of this Module.
+        kernel_size (int): The kernel size of the convolution.
+            Default: 1.
         expansion (int): The kernel size of the convolution. Default: 0.5
         add_identity (bool): Whether to add identity to the out.
             Default: True
@@ -32,6 +34,7 @@ class DarknetBottleneck(BaseModule):
     def __init__(self,
                  in_channels,
                  out_channels,
+                 kernel_size=1,
                  expansion=0.5,
                  add_identity=True,
                  use_depthwise=False,
@@ -45,16 +48,16 @@ class DarknetBottleneck(BaseModule):
         self.conv1 = ConvModule(
             in_channels,
             hidden_channels,
-            1,
+            kernel_size=1,
             conv_cfg=conv_cfg,
             norm_cfg=norm_cfg,
             act_cfg=act_cfg)
         self.conv2 = conv(
             hidden_channels,
             out_channels,
-            3,
+            kernel_size=kernel_size,
             stride=1,
-            padding=1,
+            padding=(kernel_size - 1) // 2,
             conv_cfg=conv_cfg,
             norm_cfg=norm_cfg,
             act_cfg=act_cfg)
@@ -78,6 +81,8 @@ class CSPLayer(BaseModule):
     Args:
         in_channels (int): The input channels of the CSP layer.
         out_channels (int): The output channels of the CSP layer.
+        kernel_size (int): The kernel size of the convolution.
+            Default: 1.
         expand_ratio (float): Ratio to adjust the number of channels of the
             hidden layer. Default: 0.5
         num_blocks (int): Number of blocks. Default: 1
@@ -96,7 +101,9 @@ class CSPLayer(BaseModule):
     def __init__(self,
                  in_channels,
                  out_channels,
+                 kernel_size=1,
                  expand_ratio=0.5,
+                 expansion=0.5,
                  num_blocks=1,
                  add_identity=True,
                  use_depthwise=False,
@@ -132,9 +139,10 @@ class CSPLayer(BaseModule):
             DarknetBottleneck(
                 mid_channels,
                 mid_channels,
-                1.0,
-                add_identity,
-                use_depthwise,
+                kernel_size=kernel_size,
+                expansion=expansion,
+                add_identity=add_identity,
+                use_depthwise=use_depthwise,
                 conv_cfg=conv_cfg,
                 norm_cfg=norm_cfg,
                 act_cfg=act_cfg) for _ in range(num_blocks)
